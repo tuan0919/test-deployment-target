@@ -2,7 +2,7 @@
 # this file only references the registry tag.
 services:
   web:
-    image: gmo021.cansportsvg.com:9443/library/test-deployment-target:latest
+    image: gmo021.cansportsvg.com:9443/library/test-deployment-target:v2
     ports:
       - "48081:80"
     restart: unless-stopped
