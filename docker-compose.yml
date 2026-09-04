@@ -1,0 +1,14 @@
+# InfraDesk deployments reject `build:`. CI builds and pushes the image;
+# this file only references the registry tag.
+services:
+  web:
+    image: gmo021.cansportsvg.com:9443/library/test-deployment-target:latest
+    ports:
+      - "18080:80"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1/"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
