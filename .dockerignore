@@ -1,3 +1,10 @@
 .git
+.gitignore
+.env
+app/node_modules
+app/test
+docs
+terraform
+ansible
+scripts
 README.md
-.dockerignore
