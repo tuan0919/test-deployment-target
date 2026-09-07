@@ -13,22 +13,22 @@ disable_root: true
 
 write_files:
   - path: /etc/ssh/sshd_config.d/60-deploy-key-only.conf
-    permissions: "0644"
     content: |
       PasswordAuthentication no
       PermitRootLogin no
   - path: /etc/netplan/60-eac-demo-static.yaml
-    permissions: "0600"
     content: |
       network:
         version: 2
         ethernets:
-    ens4:
+          ens4:
             dhcp4: false
             dhcp6: false
             addresses:
               - ${vm_ip}/24
 
 runcmd:
+  - [chmod, "0644", /etc/ssh/sshd_config.d/60-deploy-key-only.conf]
+  - [chmod, "0600", /etc/netplan/60-eac-demo-static.yaml]
   - [netplan, apply]
   - [systemctl, restart, ssh]
