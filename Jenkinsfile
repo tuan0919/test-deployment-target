@@ -1,6 +1,10 @@
 pipeline {
   agent any
 
+  options {
+    skipDefaultCheckout(true)
+  }
+
   parameters {
     booleanParam(name: 'RUN_ROLLBACK', defaultValue: false, description: 'Run explicit image and data rollback')
     string(name: 'KOPIA_SNAPSHOT_ID', defaultValue: '', description: 'Pre-deploy Kopia snapshot ID')
