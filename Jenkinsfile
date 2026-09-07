@@ -24,7 +24,7 @@ pipeline {
       steps {
         withCredentials([sshUserPrivateKey(credentialsId: 'BUILD_HOST_SSH_KEY', keyFileVariable: 'BUILD_SSH_KEY', usernameVariable: 'BUILD_SSH_USER')]) {
           script {
-            def revision = sh(script: '''ssh -i "$BUILD_SSH_KEY" -o StrictHostKeyChecking=accept-new "$BUILD_SSH_USER@$BUILD_HOST" "set -e; if [ ! -d \"$BUILD_WORKSPACE/.git\" ]; then timeout 60 git clone git@github.com:tuan0919/test-deployment-target.git \"$BUILD_WORKSPACE\"; fi; cd \"$BUILD_WORKSPACE\"; git remote set-url origin git@github.com:tuan0919/test-deployment-target.git; timeout 60 git fetch origin main; git checkout -f origin/main; git clean -fdx; git rev-parse HEAD"''', returnStdout: true).trim()
+            def revision = sh(script: '''ssh -i "$BUILD_SSH_KEY" -o StrictHostKeyChecking=accept-new "$BUILD_SSH_USER@$BUILD_HOST" "set -e; if [ ! -d \"$BUILD_WORKSPACE/.git\" ]; then timeout 60 git clone git@github.com:tuan0919/test-deployment-target.git \"$BUILD_WORKSPACE\"; fi; cd \"$BUILD_WORKSPACE\"; git remote set-url origin git@github.com:tuan0919/test-deployment-target.git; timeout 60 git fetch origin main; git checkout -f origin/main; git clean -fdx >&2; git rev-parse HEAD"''', returnStdout: true).trim()
             env.IMAGE_REF = "${env.REGISTRY_HOST}/library/eac-demo:${revision}"
           }
         }
