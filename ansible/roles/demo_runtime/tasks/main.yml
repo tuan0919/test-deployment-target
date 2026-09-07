@@ -1,0 +1,80 @@
+- name: Validate required non-secret inputs
+  ansible.builtin.assert:
+    that:
+      - registry_ca_cert_path is defined
+      - postgres_password is defined
+      - postgres_password | length > 0
+    fail_msg: registry_ca_cert_path and postgres_password must be supplied by Jenkins.
+
+- name: Install Docker and runtime prerequisites
+  ansible.builtin.apt:
+    name:
+      - ca-certificates
+      - curl
+      - docker.io
+      - docker-compose-v2
+      - postgresql-client
+      - tar
+    state: present
+    update_cache: true
+
+- name: Add deploy user to Docker group
+  ansible.builtin.user:
+    name: deploy
+    groups: docker
+    append: true
+
+- name: Create runtime directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: deploy
+    group: deploy
+    mode: '0750'
+  loop:
+    - "{{ eac_runtime_root }}"
+    - "{{ eac_runtime_root }}/app"
+    - "{{ eac_runtime_root }}/persist"
+    - "{{ eac_runtime_root }}/persist/postgres"
+    - "{{ eac_runtime_root }}/persist/predeploy"
+    - "{{ eac_runtime_root }}/state"
+
+- name: Install registry CA in Docker trust store
+  ansible.builtin.copy:
+    src: "{{ registry_ca_cert_path }}"
+    dest: "/etc/docker/certs.d/{{ registry_host }}/ca.crt"
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart Docker
+
+- name: Download Kopia archive
+  ansible.builtin.get_url:
+    url: "{{ kopia_archive_url }}"
+    dest: "/tmp/kopia-{{ kopia_version }}.tar.gz"
+    mode: '0644'
+
+- name: Install Kopia binary
+  ansible.builtin.unarchive:
+    src: "/tmp/kopia-{{ kopia_version }}.tar.gz"
+    dest: /usr/local/bin
+    remote_src: true
+    extra_opts: ["--strip-components=1"]
+    creates: /usr/local/bin/kopia
+
+- name: Install application Compose definition
+  ansible.builtin.template:
+    src: docker-compose.yml.j2
+    dest: "{{ eac_runtime_root }}/app/docker-compose.yml"
+    owner: deploy
+    group: deploy
+    mode: '0640'
+
+- name: Install protected runtime environment
+  ansible.builtin.template:
+    src: runtime.env.j2
+    dest: "{{ eac_runtime_root }}/app/runtime.env"
+    owner: deploy
+    group: deploy
+    mode: '0600'
+  no_log: true

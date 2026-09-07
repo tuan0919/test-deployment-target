@@ -1,0 +1,5 @@
+- name: Configure the Everything-as-Code demo VM
+  hosts: demo
+  become: true
+  roles:
+    - role: demo_runtime

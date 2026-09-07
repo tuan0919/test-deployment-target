@@ -1,0 +1,4 @@
+registry_host: gmo021.cansportsvg.com:9443
+eac_runtime_root: /srv/eac-demo
+kopia_version: 0.23.1
+kopia_archive_url: "https://github.com/kopia/kopia/releases/download/v{{ kopia_version }}/kopia-{{ kopia_version }}-linux-x64.tar.gz"
