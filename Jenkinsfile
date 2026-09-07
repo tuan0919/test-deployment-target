@@ -11,6 +11,9 @@ pipeline {
     REGISTRY_HOST = 'gmo021.cansportsvg.com:9443'
     VM_IP = '10.13.31.15'
     DEPLOY_USER = 'psserver'
+    BUILD_HOST = '10.13.34.176'
+    BUILD_USER = 'gmo021'
+    BUILD_WORKSPACE = '/home/gmo021/jenkins-build/test-deployment-target'
   }
 
   stages {
@@ -23,13 +26,24 @@ pipeline {
       }
     }
 
+    stage('Prepare Build Host') {
+      when {
+        expression { return !params.RUN_ROLLBACK }
+      }
+      steps {
+        withCredentials([sshUserPrivateKey(credentialsId: 'BUILD_HOST_SSH_KEY', keyFileVariable: 'BUILD_SSH_KEY', usernameVariable: 'BUILD_SSH_USER')]) {
+          sh 'ssh -o StrictHostKeyChecking=accept-new "$BUILD_USER@$BUILD_HOST" "set -e; if [ ! -d \"$BUILD_WORKSPACE/.git\" ]; then git clone https://github.com/tuan0919/test-deployment-target \"$BUILD_WORKSPACE\"; fi; cd \"$BUILD_WORKSPACE\"; git fetch origin main; git checkout -f \"$GIT_COMMIT\"; git clean -fdx"'
+        }
+      }
+    }
+
     stage('Unit Test') {
       when {
         expression { return !params.RUN_ROLLBACK }
       }
       steps {
-        dir('app') {
-          sh 'npm ci && npm test'
+        withCredentials([sshUserPrivateKey(credentialsId: 'BUILD_HOST_SSH_KEY', keyFileVariable: 'BUILD_SSH_KEY', usernameVariable: 'BUILD_SSH_USER')]) {
+          sh 'ssh -i "$BUILD_SSH_KEY" "$BUILD_SSH_USER@$BUILD_HOST" "cd \"$BUILD_WORKSPACE/app\" && bash -lic \"npm ci && npm test\""'
         }
       }
     }
@@ -39,7 +53,9 @@ pipeline {
         expression { return !params.RUN_ROLLBACK }
       }
       steps {
-        sh 'docker build -t "$IMAGE_REF" -f docker/Dockerfile .'
+        withCredentials([sshUserPrivateKey(credentialsId: 'BUILD_HOST_SSH_KEY', keyFileVariable: 'BUILD_SSH_KEY', usernameVariable: 'BUILD_SSH_USER')]) {
+          sh 'ssh -i "$BUILD_SSH_KEY" "$BUILD_SSH_USER@$BUILD_HOST" "cd \"$BUILD_WORKSPACE\" && docker build -t \"$IMAGE_REF\" -f docker/Dockerfile ."'
+        }
       }
     }
 
@@ -49,7 +65,9 @@ pipeline {
       }
       steps {
         withCredentials([usernamePassword(credentialsId: 'REGISTRY_CREDENTIALS', usernameVariable: 'REGISTRY_USERNAME', passwordVariable: 'REGISTRY_PASSWORD')]) {
-          sh 'set +x; printf %s "$REGISTRY_PASSWORD" | docker login "$REGISTRY_HOST" --username "$REGISTRY_USERNAME" --password-stdin; docker push "$IMAGE_REF"'
+          withCredentials([sshUserPrivateKey(credentialsId: 'BUILD_HOST_SSH_KEY', keyFileVariable: 'BUILD_SSH_KEY', usernameVariable: 'BUILD_SSH_USER')]) {
+            sh 'set +x; printf %s "$REGISTRY_PASSWORD" | ssh -i "$BUILD_SSH_KEY" "$BUILD_SSH_USER@$BUILD_HOST" "cd \"$BUILD_WORKSPACE\" && docker login \"$REGISTRY_HOST\" --username \"$REGISTRY_USERNAME\" --password-stdin && docker push \"$IMAGE_REF\""'
+          }
         }
       }
     }
