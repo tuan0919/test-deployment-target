@@ -40,6 +40,7 @@ resource "terraform_data" "multipass_vm" {
     environment = {
       INSTANCE_NAME     = local.instance_name
       MULTIPASS_NETWORK = var.multipass_network
+      VM_IP             = var.vm_ip
     }
   }
 
