@@ -30,6 +30,11 @@ resource "local_file" "ansible_inventory" {
 resource "terraform_data" "multipass_vm" {
   triggers_replace = [local_file.cloud_init.content_sha256, var.multipass_network]
 
+  input = {
+    instance_name    = local.instance_name
+    multipass_script = "${local.repository_root}/scripts/multipass.sh"
+  }
+
   provisioner "local-exec" {
     command = "${local.repository_root}/scripts/multipass.sh apply ${local_file.cloud_init.filename}"
     environment = {
@@ -40,9 +45,9 @@ resource "terraform_data" "multipass_vm" {
 
   provisioner "local-exec" {
     when    = destroy
-    command = "${local.repository_root}/scripts/multipass.sh destroy"
+    command = "${self.input.multipass_script} destroy"
     environment = {
-      INSTANCE_NAME = local.instance_name
+      INSTANCE_NAME = self.input.instance_name
     }
   }
 
