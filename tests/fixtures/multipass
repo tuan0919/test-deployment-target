@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+printf '%s\n' "$*" >> "$MULTIPASS_LOG"
+
+if [[ "$1" == "info" ]]; then
+  exit "${MULTIPASS_INFO_EXIT:-1}"
+fi
