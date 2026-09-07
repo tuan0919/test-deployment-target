@@ -77,10 +77,12 @@ pipeline {
         expression { return !params.RUN_ROLLBACK }
       }
       steps {
-        withCredentials([sshUserPrivateKey(credentialsId: 'DEPLOY_SSH_KEY', keyFileVariable: 'SSH_KEY', usernameVariable: 'DEPLOY_USER')]) {
-          dir('terraform') {
-            sh 'set +x; TF_VAR_deploy_ssh_public_key="$(ssh-keygen -y -f "$SSH_KEY")" terraform init -input=false && TF_VAR_deploy_ssh_public_key="$(ssh-keygen -y -f "$SSH_KEY")" terraform apply -auto-approve -input=false'
-          }
+        withCredentials([sshUserPrivateKey(credentialsId: 'DEPLOY_SSH_KEY', keyFileVariable: 'DEPLOY_KEY_FILE', usernameVariable: 'DEPLOY_SSH_USER'), sshUserPrivateKey(credentialsId: 'BUILD_HOST_SSH_KEY', keyFileVariable: 'BUILD_SSH_KEY', usernameVariable: 'BUILD_SSH_USER')]) {
+          sh '''set +x
+            DEPLOY_PUBLIC_KEY="$(ssh-keygen -y -f "$DEPLOY_KEY_FILE")"
+            ssh -i "$BUILD_SSH_KEY" "$BUILD_SSH_USER@$BUILD_HOST" \
+              "cd '$BUILD_WORKSPACE/terraform' && TF_VAR_deploy_ssh_public_key='$DEPLOY_PUBLIC_KEY' terraform init -input=false && TF_VAR_deploy_ssh_public_key='$DEPLOY_PUBLIC_KEY' terraform apply -auto-approve -input=false"
+          '''
         }
       }
     }
@@ -90,9 +92,18 @@ pipeline {
         expression { return !params.RUN_ROLLBACK }
       }
       steps {
-        withCredentials([file(credentialsId: 'REGISTRY_CA_CERT', variable: 'REGISTRY_CA_CERT_PATH'), string(credentialsId: 'POSTGRES_PASSWORD', variable: 'POSTGRES_PASSWORD')]) {
-          dir('ansible') {
-            sh 'set +x; ansible-playbook playbooks/configure.yml -e "registry_ca_cert_path=$REGISTRY_CA_CERT_PATH" -e "postgres_password=$POSTGRES_PASSWORD"'
+        withCredentials([file(credentialsId: 'REGISTRY_CA_CERT', variable: 'REGISTRY_CA_CERT_PATH'), string(credentialsId: 'POSTGRES_PASSWORD', variable: 'POSTGRES_PASSWORD'), sshUserPrivateKey(credentialsId: 'DEPLOY_SSH_KEY', keyFileVariable: 'DEPLOY_KEY_FILE', usernameVariable: 'DEPLOY_SSH_USER'), sshUserPrivateKey(credentialsId: 'BUILD_HOST_SSH_KEY', keyFileVariable: 'BUILD_SSH_KEY', usernameVariable: 'BUILD_SSH_USER')]) {
+          sh '''set +x
+            REMOTE_CA_CERT=/tmp/jenkins-registry-ca.pem
+            REMOTE_DEPLOY_KEY=/tmp/jenkins-deploy-key
+            cleanup() {
+              ssh -i "$BUILD_SSH_KEY" "$BUILD_SSH_USER@$BUILD_HOST" "rm -f '$REMOTE_CA_CERT' '$REMOTE_DEPLOY_KEY'"
+            }
+            trap cleanup EXIT
+            scp -i "$BUILD_SSH_KEY" "$REGISTRY_CA_CERT_PATH" "$BUILD_SSH_USER@$BUILD_HOST:$REMOTE_CA_CERT"
+            scp -i "$BUILD_SSH_KEY" "$DEPLOY_KEY_FILE" "$BUILD_SSH_USER@$BUILD_HOST:$REMOTE_DEPLOY_KEY"
+            ssh -i "$BUILD_SSH_KEY" "$BUILD_SSH_USER@$BUILD_HOST" \
+              "chmod 600 '$REMOTE_DEPLOY_KEY' && cd '$BUILD_WORKSPACE/ansible' && ansible-playbook playbooks/configure.yml -e 'ansible_ssh_private_key_file=$REMOTE_DEPLOY_KEY' -e 'registry_ca_cert_path=$REMOTE_CA_CERT' -e 'postgres_password=$POSTGRES_PASSWORD'"
           }
         }
       }
