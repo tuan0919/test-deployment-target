@@ -32,7 +32,7 @@ pipeline {
       }
       steps {
         withCredentials([sshUserPrivateKey(credentialsId: 'BUILD_HOST_SSH_KEY', keyFileVariable: 'BUILD_SSH_KEY', usernameVariable: 'BUILD_SSH_USER')]) {
-          sh 'ssh -i "$BUILD_SSH_KEY" -o StrictHostKeyChecking=accept-new "$BUILD_SSH_USER@$BUILD_HOST" "set -e; if [ ! -d \"$BUILD_WORKSPACE/.git\" ]; then git clone https://github.com/tuan0919/test-deployment-target \"$BUILD_WORKSPACE\"; fi; cd \"$BUILD_WORKSPACE\"; git fetch origin main; git checkout -f \"$GIT_COMMIT\"; git clean -fdx"'
+          sh 'ssh -i "$BUILD_SSH_KEY" -o StrictHostKeyChecking=accept-new "$BUILD_SSH_USER@$BUILD_HOST" "set -e; if [ ! -d \"$BUILD_WORKSPACE/.git\" ]; then git clone git@github.com:tuan0919/test-deployment-target.git \"$BUILD_WORKSPACE\"; fi; cd \"$BUILD_WORKSPACE\"; git remote set-url origin git@github.com:tuan0919/test-deployment-target.git; git fetch origin main; git checkout -f \"$GIT_COMMIT\"; git clean -fdx"'
         }
       }
     }
