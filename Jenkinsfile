@@ -43,7 +43,7 @@ pipeline {
       }
       steps {
         withCredentials([sshUserPrivateKey(credentialsId: 'BUILD_HOST_SSH_KEY', keyFileVariable: 'BUILD_SSH_KEY', usernameVariable: 'BUILD_SSH_USER')]) {
-          sh 'ssh -i "$BUILD_SSH_KEY" "$BUILD_SSH_USER@$BUILD_HOST" "cd \"$BUILD_WORKSPACE/app\" && bash -lic \"npm ci && npm test\""'
+          sh '''ssh -i "$BUILD_SSH_KEY" "$BUILD_SSH_USER@$BUILD_HOST" "cd '$BUILD_WORKSPACE/app' && bash -lic 'npm ci && npm test'"'''
         }
       }
     }
