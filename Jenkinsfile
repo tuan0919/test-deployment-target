@@ -101,7 +101,7 @@ pipeline {
             scp -i "$BUILD_SSH_KEY" "$REGISTRY_CA_CERT_PATH" "$BUILD_SSH_USER@$BUILD_HOST:$REMOTE_CA_CERT"
             scp -i "$BUILD_SSH_KEY" "$DEPLOY_KEY_FILE" "$BUILD_SSH_USER@$BUILD_HOST:$REMOTE_DEPLOY_KEY"
             ssh -i "$BUILD_SSH_KEY" "$BUILD_SSH_USER@$BUILD_HOST" \
-              "chmod 600 '$REMOTE_DEPLOY_KEY' && cd '$BUILD_WORKSPACE/ansible' && ansible-playbook playbooks/configure.yml -e 'ansible_ssh_private_key_file=$REMOTE_DEPLOY_KEY' -e 'registry_ca_cert_path=$REMOTE_CA_CERT' -e 'postgres_password=$POSTGRES_PASSWORD'"
+              "chmod 600 '$REMOTE_DEPLOY_KEY' && cd '$BUILD_WORKSPACE/ansible' && umask 077 && ssh-keyscan -H -T 10 '$VM_IP' > inventory/known_hosts && ansible-playbook playbooks/configure.yml -e 'ansible_ssh_private_key_file=$REMOTE_DEPLOY_KEY' -e 'registry_ca_cert_path=$REMOTE_CA_CERT' -e 'postgres_password=$POSTGRES_PASSWORD'"
           '''
           }
         }

@@ -6,5 +6,6 @@ terraform/cloud-init.generated.yaml
 *.tfstate
 *.tfstate.*
 ansible/inventory/generated.ini
+ansible/inventory/known_hosts
 ansible/inventory/generated.yml
 rollback-context.json
