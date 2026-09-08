@@ -5,6 +5,7 @@ APP_ROOT="${APP_ROOT:-/srv/eac-demo/app}"
 PERSIST_DIR="${PERSIST_DIR:-/srv/eac-demo/persist}"
 RUNTIME_ENV="$APP_ROOT/runtime.env"
 COMPOSE_FILE="$APP_ROOT/docker-compose.yml"
+cd "$APP_ROOT"
 started=0
 restart_compose() { if [[ "$started" == 0 ]]; then docker compose --env-file "$RUNTIME_ENV" -f "$COMPOSE_FILE" up -d --wait; fi; }
 trap restart_compose EXIT

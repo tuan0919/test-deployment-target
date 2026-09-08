@@ -141,7 +141,7 @@ pipeline {
           script {
             if (env.PREVIOUS_IMAGE) {
               withCredentials([usernamePassword(credentialsId: 'KOPIA_CREDENTIALS', usernameVariable: 'KOPIA_USERNAME', passwordVariable: 'KOPIA_PASSWORD'), string(credentialsId: 'KOPIA_SERVER', variable: 'KOPIA_SERVER')]) {
-                sh 'set +x; ssh -i "$DEPLOY_KEY_FILE" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$WORKSPACE/.jenkins-known-hosts" $DEPLOY_USER@$VM_IP "KOPIA_SERVER=\"$KOPIA_SERVER\" KOPIA_USERNAME=\"$KOPIA_USERNAME\" KOPIA_PASSWORD=\"$KOPIA_PASSWORD\" bash -s" < scripts/backup.sh | tee snapshot.log'
+                sh 'set -o pipefail; set +x; ssh -i "$DEPLOY_KEY_FILE" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$WORKSPACE/.jenkins-known-hosts" $DEPLOY_USER@$VM_IP "KOPIA_SERVER=\"$KOPIA_SERVER\" KOPIA_USERNAME=\"$KOPIA_USERNAME\" KOPIA_PASSWORD=\"$KOPIA_PASSWORD\" bash -s" < scripts/backup.sh | tee snapshot.log'
               }
             } else {
               sh 'printf "snapshot-id: none (first deployment)\\n" | tee snapshot.log'
