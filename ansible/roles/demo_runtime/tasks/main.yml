@@ -94,6 +94,21 @@
     group: deploy
     mode: '0640'
 
+- name: Check whether a deployment image is already recorded
+  ansible.builtin.stat:
+    path: "{{ eac_runtime_root }}/state/current-image"
+  register: current_image_state
+
+- name: Read the currently deployed immutable image
+  ansible.builtin.slurp:
+    src: "{{ eac_runtime_root }}/state/current-image"
+  register: current_image_file
+  when: current_image_state.stat.exists
+
+- name: Preserve the current deployment image in runtime configuration
+  ansible.builtin.set_fact:
+    current_image_ref: "{{ (current_image_file.content | b64decode | trim) if current_image_state.stat.exists else '' }}"
+
 - name: Install protected runtime environment
   ansible.builtin.template:
     src: runtime.env.j2
