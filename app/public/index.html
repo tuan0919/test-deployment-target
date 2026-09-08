@@ -1,28 +1,41 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Everything-as-Code Notes</title>
-    <link rel="stylesheet" href="/styles.css">
+    <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
     <main class="page" id="notes-app">
       <header>
-        <p class="eyebrow">Everything as Code demo</p>
+        <p class="eyebrow">Everything as Code demo v1.0</p>
         <h1>Persistent Notes</h1>
-        <p class="subtitle">Create data here, snapshot it with Kopia, and visibly restore it during rollback.</p>
-        <p class="deployment" id="deployment-version">Deployment version: loading…</p>
+        <p class="subtitle">
+          Create data here, snapshot it with Kopia, and visibly restore it
+          during rollback.
+        </p>
+        <p class="deployment" id="deployment-version">
+          Deployment version: loading…
+        </p>
       </header>
 
       <section class="panel" aria-labelledby="new-note-title">
         <h2 id="new-note-title">Add a note</h2>
         <form id="note-form">
           <label for="note-text">Note text</label>
-          <textarea id="note-text" name="text" required maxlength="500" placeholder="For example: state before v1.2"></textarea>
+          <textarea
+            id="note-text"
+            name="text"
+            required
+            maxlength="500"
+            placeholder="For example: state before v1.2"
+          ></textarea>
           <div class="form-actions">
             <button type="submit">Save note</button>
-            <button type="button" class="secondary" id="cancel-edit" hidden>Cancel edit</button>
+            <button type="button" class="secondary" id="cancel-edit" hidden>
+              Cancel edit
+            </button>
           </div>
         </form>
         <p class="message" id="message" aria-live="polite"></p>
@@ -31,9 +44,13 @@
       <section class="panel" aria-labelledby="notes-title">
         <div class="section-heading">
           <h2 id="notes-title">Saved notes</h2>
-          <button type="button" class="secondary" id="refresh-notes">Refresh</button>
+          <button type="button" class="secondary" id="refresh-notes">
+            Refresh
+          </button>
         </div>
-        <p id="empty-state" hidden>No notes yet. Add one to create persistent demo data.</p>
+        <p id="empty-state" hidden>
+          No notes yet. Add one to create persistent demo data.
+        </p>
         <ul id="notes-list" class="notes-list" aria-live="polite"></ul>
       </section>
     </main>
