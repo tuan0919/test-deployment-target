@@ -36,6 +36,15 @@ pipeline {
       }
     }
 
+    stage('Checkout Runtime Scripts') {
+      when {
+        expression { return !params.RUN_ROLLBACK }
+      }
+      steps {
+        checkout scm
+      }
+    }
+
     stage('Unit Test') {
       when {
         expression { return !params.RUN_ROLLBACK }
@@ -107,14 +116,15 @@ pipeline {
           }
         }
       }
+    }
 
     stage('Integration Test') {
       when {
         expression { return !params.RUN_ROLLBACK }
       }
       steps {
-        sshagent(credentials: ['DEPLOY_SSH_KEY']) {
-          sh 'ssh $DEPLOY_USER@$VM_IP "docker --version && docker compose version && kopia --version"'
+        withCredentials([sshUserPrivateKey(credentialsId: 'DEPLOY_SSH_KEY', keyFileVariable: 'DEPLOY_KEY_FILE')]) {
+          sh 'ssh -i "$DEPLOY_KEY_FILE" $DEPLOY_USER@$VM_IP "docker --version && docker compose version && kopia --version"'
         }
       }
     }
@@ -124,13 +134,11 @@ pipeline {
         expression { return !params.RUN_ROLLBACK }
       }
       steps {
-        sshagent(credentials: ['DEPLOY_SSH_KEY']) {
+        withCredentials([sshUserPrivateKey(credentialsId: 'DEPLOY_SSH_KEY', keyFileVariable: 'DEPLOY_KEY_FILE'), usernamePassword(credentialsId: 'KOPIA_CREDENTIALS', usernameVariable: 'KOPIA_USERNAME', passwordVariable: 'KOPIA_PASSWORD'), string(credentialsId: 'KOPIA_SERVER', variable: 'KOPIA_SERVER')]) {
           script {
-            env.PREVIOUS_IMAGE = sh(script: 'ssh $DEPLOY_USER@$VM_IP "cat /srv/eac-demo/state/current-image 2>/dev/null || true"', returnStdout: true).trim()
+            env.PREVIOUS_IMAGE = sh(script: 'ssh -i "$DEPLOY_KEY_FILE" $DEPLOY_USER@$VM_IP "cat /srv/eac-demo/state/current-image 2>/dev/null || true"', returnStdout: true).trim()
           }
-          withCredentials([usernamePassword(credentialsId: 'KOPIA_CREDENTIALS', usernameVariable: 'KOPIA_USERNAME', passwordVariable: 'KOPIA_PASSWORD')]) {
-            sh 'set +x; if [ -n "$PREVIOUS_IMAGE" ]; then ssh $DEPLOY_USER@$VM_IP "KOPIA_SERVER=\"$KOPIA_SERVER\" KOPIA_USERNAME=\"$KOPIA_USERNAME\" KOPIA_PASSWORD=\"$KOPIA_PASSWORD\" bash -s" < scripts/backup.sh | tee snapshot.log; else printf "snapshot-id: none (first deployment)\\n" | tee snapshot.log; fi'
-          }
+          sh 'set +x; if [ -n "$PREVIOUS_IMAGE" ]; then ssh -i "$DEPLOY_KEY_FILE" $DEPLOY_USER@$VM_IP "KOPIA_SERVER=\"$KOPIA_SERVER\" KOPIA_USERNAME=\"$KOPIA_USERNAME\" KOPIA_PASSWORD=\"$KOPIA_PASSWORD\" bash -s" < scripts/backup.sh | tee snapshot.log; else printf "snapshot-id: none (first deployment)\\n" | tee snapshot.log; fi'
           script {
             env.SNAPSHOT_LOG = readFile('snapshot.log').trim()
           }
@@ -143,8 +151,8 @@ pipeline {
         expression { return !params.RUN_ROLLBACK }
       }
       steps {
-        sshagent(credentials: ['DEPLOY_SSH_KEY']) {
-          sh 'ssh $DEPLOY_USER@$VM_IP "bash -s -- \"$IMAGE_REF\"" < scripts/deploy.sh'
+        withCredentials([sshUserPrivateKey(credentialsId: 'DEPLOY_SSH_KEY', keyFileVariable: 'DEPLOY_KEY_FILE')]) {
+          sh 'ssh -i "$DEPLOY_KEY_FILE" $DEPLOY_USER@$VM_IP "bash -s -- \"$IMAGE_REF\"" < scripts/deploy.sh'
         }
       }
     }
@@ -154,8 +162,8 @@ pipeline {
         expression { return !params.RUN_ROLLBACK }
       }
       steps {
-        sshagent(credentials: ['DEPLOY_SSH_KEY']) {
-          sh 'ssh $DEPLOY_USER@$VM_IP "bash -s -- \"${IMAGE_REF##*:}\"" < scripts/health-check.sh'
+        withCredentials([sshUserPrivateKey(credentialsId: 'DEPLOY_SSH_KEY', keyFileVariable: 'DEPLOY_KEY_FILE')]) {
+          sh 'ssh -i "$DEPLOY_KEY_FILE" $DEPLOY_USER@$VM_IP "bash -s -- \"${IMAGE_REF##*:}\"" < scripts/health-check.sh'
         }
       }
     }
@@ -166,9 +174,8 @@ pipeline {
       }
       steps {
         input message: 'Approve explicit rollback of image and persistent data', ok: 'Rollback'
-        sshagent(credentials: ['DEPLOY_SSH_KEY']) {
-          withCredentials([usernamePassword(credentialsId: 'KOPIA_CREDENTIALS', usernameVariable: 'KOPIA_USERNAME', passwordVariable: 'KOPIA_PASSWORD')]) {
-            sh 'set +x; ssh $DEPLOY_USER@$VM_IP "KOPIA_SERVER=\"$KOPIA_SERVER\" KOPIA_USERNAME=\"$KOPIA_USERNAME\" KOPIA_PASSWORD=\"$KOPIA_PASSWORD\" bash -s -- \"$KOPIA_SNAPSHOT_ID\" \"$ROLLBACK_IMAGE\"" < scripts/rollback.sh'
+        withCredentials([sshUserPrivateKey(credentialsId: 'DEPLOY_SSH_KEY', keyFileVariable: 'DEPLOY_KEY_FILE'), usernamePassword(credentialsId: 'KOPIA_CREDENTIALS', usernameVariable: 'KOPIA_USERNAME', passwordVariable: 'KOPIA_PASSWORD'), string(credentialsId: 'KOPIA_SERVER', variable: 'KOPIA_SERVER')]) {
+            sh 'set +x; ssh -i "$DEPLOY_KEY_FILE" $DEPLOY_USER@$VM_IP "KOPIA_SERVER=\"$KOPIA_SERVER\" KOPIA_USERNAME=\"$KOPIA_USERNAME\" KOPIA_PASSWORD=\"$KOPIA_PASSWORD\" bash -s -- \"$KOPIA_SNAPSHOT_ID\" \"$ROLLBACK_IMAGE\"" < scripts/rollback.sh'
           }
         }
       }
