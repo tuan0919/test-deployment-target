@@ -14,7 +14,7 @@ pipeline {
   environment {
     REGISTRY_HOST = 'gmo021.cansportsvg.com:9443'
     VM_IP = '10.13.31.15'
-    DEPLOY_USER = 'psserver'
+    DEPLOY_USER = 'deploy'
     BUILD_HOST = '10.13.34.176'
     BUILD_USER = 'gmo021'
     BUILD_WORKSPACE = '/home/gmo021/jenkins-build/test-deployment-target'
@@ -113,7 +113,9 @@ pipeline {
         expression { return !params.RUN_ROLLBACK }
       }
       steps {
-        sh 'curl --fail --retry 10 "http://$VM_IP:8080/health"'
+        sshagent(credentials: ['DEPLOY_SSH_KEY']) {
+          sh 'ssh $DEPLOY_USER@$VM_IP "docker --version && docker compose version && kopia --version"'
+        }
       }
     }
 
@@ -127,7 +129,7 @@ pipeline {
             env.PREVIOUS_IMAGE = sh(script: 'ssh $DEPLOY_USER@$VM_IP "cat /srv/eac-demo/state/current-image 2>/dev/null || true"', returnStdout: true).trim()
           }
           withCredentials([usernamePassword(credentialsId: 'KOPIA_CREDENTIALS', usernameVariable: 'KOPIA_USERNAME', passwordVariable: 'KOPIA_PASSWORD')]) {
-            sh 'set +x; ssh $DEPLOY_USER@$VM_IP "KOPIA_SERVER=\"$KOPIA_SERVER\" KOPIA_USERNAME=\"$KOPIA_USERNAME\" KOPIA_PASSWORD=\"$KOPIA_PASSWORD\" bash -s" < scripts/backup.sh | tee snapshot.log'
+            sh 'set +x; if [ -n "$PREVIOUS_IMAGE" ]; then ssh $DEPLOY_USER@$VM_IP "KOPIA_SERVER=\"$KOPIA_SERVER\" KOPIA_USERNAME=\"$KOPIA_USERNAME\" KOPIA_PASSWORD=\"$KOPIA_PASSWORD\" bash -s" < scripts/backup.sh | tee snapshot.log; else printf "snapshot-id: none (first deployment)\\n" | tee snapshot.log; fi'
           }
           script {
             env.SNAPSHOT_LOG = readFile('snapshot.log').trim()
