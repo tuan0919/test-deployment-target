@@ -116,7 +116,6 @@ pipeline {
           }
         }
       }
-    }
 
     stage('Integration Test') {
       when {
