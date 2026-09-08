@@ -56,6 +56,15 @@
     mode: '0644'
   notify: Restart Docker
 
+- name: Install registry CA in the system trust store
+  ansible.builtin.copy:
+    content: "{{ lookup('ansible.builtin.file', registry_ca_cert_path) | regex_replace('(?m)^\\+-----BEGIN CERTIFICATE-----', '-----BEGIN CERTIFICATE-----') }}"
+    dest: "/usr/local/share/ca-certificates/{{ registry_host | regex_replace(':', '-') }}.crt"
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Update system CA certificates
+
 - name: Download Kopia archive
   ansible.builtin.get_url:
     url: "{{ kopia_archive_url }}"
