@@ -66,3 +66,28 @@ test('lists persisted notes newest first', async () => {
 
   assert.deepEqual(response.body, notes);
 });
+
+test('updates an existing persisted note', async () => {
+  const note = { id: 7, text: 'after-edit', created_at: '2026-09-07T00:00:00.000Z' };
+  const response = await request(createApp({ pool: createPool({ rows: [note] }) }))
+    .patch('/notes/7')
+    .send({ text: '  after-edit  ' })
+    .expect(200);
+
+  assert.deepEqual(response.body, note);
+});
+
+test('deletes an existing persisted note', async () => {
+  await request(createApp({ pool: createPool({ rows: [{ id: 7 }] }) }))
+    .delete('/notes/7')
+    .expect(204);
+});
+
+test('serves the interactive notes application at the root URL', async () => {
+  const response = await request(createApp({ pool: createPool(), version: 'abc123' }))
+    .get('/')
+    .expect(200);
+
+  assert.match(response.text, /Notes/i);
+  assert.match(response.text, /app\.js/);
+});

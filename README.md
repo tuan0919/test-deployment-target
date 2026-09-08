@@ -1,6 +1,8 @@
 # Everything-as-Code demo
 
-Small Node/Express + PostgreSQL demo for Terraform, Multipass, Ansible, Docker Registry, Jenkins and Kopia.
+Small interactive Notes CRUD application backed by Node/Express + PostgreSQL, used to demonstrate Terraform, Multipass, Ansible, Docker Registry, Jenkins and Kopia.
+
+The same application serves both the browser UI at `/` and its JSON API. The UI deliberately makes the persistent-data scenario visible: add a note before a release, take a Kopia snapshot, then restore that note during the rollback demo.
 
 ## Jenkins credentials
 
@@ -34,6 +36,10 @@ terraform -chdir=terraform destroy
 
 ## Demo flow
 
-Run a normal Jenkins build for v1.1. Add a note with `POST /notes`, then record the Kopia output from **Pre-deploy Kopia Snapshot**. Deploy a deliberately unhealthy v1.2 to make health verification fail. Start a new build with `RUN_ROLLBACK=true`, set `KOPIA_SNAPSHOT_ID` and the v1.1 immutable `ROLLBACK_IMAGE`, then approve the input gate. Verify `/health`, `/version`, and `/notes`.
+Run a normal Jenkins build for v1.1. Open `http://10.13.31.15:8080/` and add a note such as `state before v1.2`; the page supports create, edit, delete and refresh. Record the Kopia output from **Pre-deploy Kopia Snapshot**. Deploy a deliberately unhealthy v1.2 to make health verification fail. Start a new build with `RUN_ROLLBACK=true`, set `KOPIA_SNAPSHOT_ID` and the v1.1 immutable `ROLLBACK_IMAGE`, then approve the input gate. Verify the restored note in the UI, along with `/health` and `/version`.
+
+## Application tests
+
+`npm test` covers API behavior and an in-memory browser DOM interaction: it loads the UI, submits a note and verifies that the returned persistent note and immutable deployment version are rendered. Jenkins runs this before image construction.
 
 The rollback context artifact contains the previous image and snapshot command output. Data restore is always explicit; failed deployment does not trigger automatic rollback.

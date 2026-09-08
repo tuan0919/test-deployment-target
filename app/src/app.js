@@ -1,8 +1,13 @@
 import express from 'express';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+
+const publicDirectory = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'public');
 
 export function createApp({ pool, version = 'dev' }) {
   const app = express();
   app.use(express.json());
+  app.use(express.static(publicDirectory));
 
   app.get('/health', async (_request, response) => {
     try {
@@ -39,6 +44,48 @@ export function createApp({ pool, version = 'dev' }) {
         [text]
       );
       response.status(201).json(result.rows[0]);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.patch('/notes/:id', async (request, response, next) => {
+    const id = Number(request.params.id);
+    const text = typeof request.body?.text === 'string' ? request.body.text.trim() : '';
+    if (!Number.isInteger(id) || id < 1 || !text) {
+      response.status(400).json({ error: 'valid id and text are required' });
+      return;
+    }
+
+    try {
+      const result = await pool.query(
+        'UPDATE notes SET text = $1 WHERE id = $2 RETURNING id, text, created_at',
+        [text, id]
+      );
+      if (!result.rows[0]) {
+        response.status(404).json({ error: 'note not found' });
+        return;
+      }
+      response.json(result.rows[0]);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.delete('/notes/:id', async (request, response, next) => {
+    const id = Number(request.params.id);
+    if (!Number.isInteger(id) || id < 1) {
+      response.status(400).json({ error: 'valid id is required' });
+      return;
+    }
+
+    try {
+      const result = await pool.query('DELETE FROM notes WHERE id = $1 RETURNING id', [id]);
+      if (!result.rows[0]) {
+        response.status(404).json({ error: 'note not found' });
+        return;
+      }
+      response.status(204).end();
     } catch (error) {
       next(error);
     }
