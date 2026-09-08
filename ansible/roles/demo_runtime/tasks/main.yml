@@ -35,9 +35,16 @@
     - "{{ eac_runtime_root }}"
     - "{{ eac_runtime_root }}/app"
     - "{{ eac_runtime_root }}/persist"
-    - "{{ eac_runtime_root }}/persist/postgres"
     - "{{ eac_runtime_root }}/persist/predeploy"
     - "{{ eac_runtime_root }}/state"
+
+- name: Set PostgreSQL data directory ownership for the container user
+  ansible.builtin.file:
+    path: "{{ eac_runtime_root }}/persist/postgres"
+    state: directory
+    owner: '70'
+    group: '70'
+    mode: '0700'
 
 - name: Create Docker registry trust directory
   ansible.builtin.file:
