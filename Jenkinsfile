@@ -179,8 +179,6 @@ pipeline {
         }
       }
     }
-  }
-
   post {
     always {
       script {
