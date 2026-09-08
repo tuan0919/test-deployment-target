@@ -134,11 +134,19 @@ pipeline {
         expression { return !params.RUN_ROLLBACK }
       }
       steps {
-        withCredentials([sshUserPrivateKey(credentialsId: 'DEPLOY_SSH_KEY', keyFileVariable: 'DEPLOY_KEY_FILE'), usernamePassword(credentialsId: 'KOPIA_CREDENTIALS', usernameVariable: 'KOPIA_USERNAME', passwordVariable: 'KOPIA_PASSWORD'), string(credentialsId: 'KOPIA_SERVER', variable: 'KOPIA_SERVER')]) {
+        withCredentials([sshUserPrivateKey(credentialsId: 'DEPLOY_SSH_KEY', keyFileVariable: 'DEPLOY_KEY_FILE')]) {
           script {
             env.PREVIOUS_IMAGE = sh(script: 'ssh -i "$DEPLOY_KEY_FILE" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$WORKSPACE/.jenkins-known-hosts" $DEPLOY_USER@$VM_IP "cat /srv/eac-demo/state/current-image 2>/dev/null || true"', returnStdout: true).trim()
           }
-          sh 'set +x; if [ -n "$PREVIOUS_IMAGE" ]; then ssh -i "$DEPLOY_KEY_FILE" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$WORKSPACE/.jenkins-known-hosts" $DEPLOY_USER@$VM_IP "KOPIA_SERVER=\"$KOPIA_SERVER\" KOPIA_USERNAME=\"$KOPIA_USERNAME\" KOPIA_PASSWORD=\"$KOPIA_PASSWORD\" bash -s" < scripts/backup.sh | tee snapshot.log; else printf "snapshot-id: none (first deployment)\\n" | tee snapshot.log; fi'
+          script {
+            if (env.PREVIOUS_IMAGE) {
+              withCredentials([usernamePassword(credentialsId: 'KOPIA_CREDENTIALS', usernameVariable: 'KOPIA_USERNAME', passwordVariable: 'KOPIA_PASSWORD'), string(credentialsId: 'KOPIA_SERVER', variable: 'KOPIA_SERVER')]) {
+                sh 'set +x; ssh -i "$DEPLOY_KEY_FILE" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$WORKSPACE/.jenkins-known-hosts" $DEPLOY_USER@$VM_IP "KOPIA_SERVER=\"$KOPIA_SERVER\" KOPIA_USERNAME=\"$KOPIA_USERNAME\" KOPIA_PASSWORD=\"$KOPIA_PASSWORD\" bash -s" < scripts/backup.sh | tee snapshot.log'
+              }
+            } else {
+              sh 'printf "snapshot-id: none (first deployment)\\n" | tee snapshot.log'
+            }
+          }
           script {
             env.SNAPSHOT_LOG = readFile('snapshot.log').trim()
           }
