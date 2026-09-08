@@ -49,7 +49,7 @@
 
 - name: Install registry CA in Docker trust store
   ansible.builtin.copy:
-    src: "{{ registry_ca_cert_path }}"
+    content: "{{ lookup('ansible.builtin.file', registry_ca_cert_path) | regex_replace('(?m)^\\+-----BEGIN CERTIFICATE-----', '-----BEGIN CERTIFICATE-----') }}"
     dest: "/etc/docker/certs.d/{{ registry_host }}/ca.crt"
     owner: root
     group: root
