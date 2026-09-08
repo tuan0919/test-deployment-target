@@ -159,8 +159,11 @@ pipeline {
         expression { return !params.RUN_ROLLBACK }
       }
       steps {
-        withCredentials([sshUserPrivateKey(credentialsId: 'DEPLOY_SSH_KEY', keyFileVariable: 'DEPLOY_KEY_FILE')]) {
-          sh 'ssh -i "$DEPLOY_KEY_FILE" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$WORKSPACE/.jenkins-known-hosts" $DEPLOY_USER@$VM_IP "bash -s -- \"$IMAGE_REF\"" < scripts/deploy.sh'
+        withCredentials([sshUserPrivateKey(credentialsId: 'DEPLOY_SSH_KEY', keyFileVariable: 'DEPLOY_KEY_FILE'), usernamePassword(credentialsId: 'REGISTRY_CREDENTIALS', usernameVariable: 'REGISTRY_USERNAME', passwordVariable: 'REGISTRY_PASSWORD')]) {
+          sh '''set +x
+            printf %s "$REGISTRY_PASSWORD" | ssh -i "$DEPLOY_KEY_FILE" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$WORKSPACE/.jenkins-known-hosts" "$DEPLOY_USER@$VM_IP" "docker login '$REGISTRY_HOST' --username '$REGISTRY_USERNAME' --password-stdin"
+            ssh -i "$DEPLOY_KEY_FILE" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$WORKSPACE/.jenkins-known-hosts" "$DEPLOY_USER@$VM_IP" "bash -s -- '$IMAGE_REF'" < scripts/deploy.sh
+          '''
         }
       }
     }
@@ -182,8 +185,11 @@ pipeline {
       }
       steps {
         input message: 'Approve explicit rollback of image and persistent data', ok: 'Rollback'
-        withCredentials([sshUserPrivateKey(credentialsId: 'DEPLOY_SSH_KEY', keyFileVariable: 'DEPLOY_KEY_FILE'), usernamePassword(credentialsId: 'KOPIA_CREDENTIALS', usernameVariable: 'KOPIA_USERNAME', passwordVariable: 'KOPIA_PASSWORD'), string(credentialsId: 'KOPIA_SERVER', variable: 'KOPIA_SERVER')]) {
-            sh 'set +x; ssh -i "$DEPLOY_KEY_FILE" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$WORKSPACE/.jenkins-known-hosts" $DEPLOY_USER@$VM_IP "KOPIA_SERVER=\"$KOPIA_SERVER\" KOPIA_USERNAME=\"$KOPIA_USERNAME\" KOPIA_PASSWORD=\"$KOPIA_PASSWORD\" bash -s -- \"$KOPIA_SNAPSHOT_ID\" \"$ROLLBACK_IMAGE\"" < scripts/rollback.sh'
+        withCredentials([sshUserPrivateKey(credentialsId: 'DEPLOY_SSH_KEY', keyFileVariable: 'DEPLOY_KEY_FILE'), usernamePassword(credentialsId: 'REGISTRY_CREDENTIALS', usernameVariable: 'REGISTRY_USERNAME', passwordVariable: 'REGISTRY_PASSWORD'), usernamePassword(credentialsId: 'KOPIA_CREDENTIALS', usernameVariable: 'KOPIA_USERNAME', passwordVariable: 'KOPIA_PASSWORD'), string(credentialsId: 'KOPIA_SERVER', variable: 'KOPIA_SERVER')]) {
+            sh '''set +x
+              printf %s "$REGISTRY_PASSWORD" | ssh -i "$DEPLOY_KEY_FILE" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$WORKSPACE/.jenkins-known-hosts" "$DEPLOY_USER@$VM_IP" "docker login '$REGISTRY_HOST' --username '$REGISTRY_USERNAME' --password-stdin"
+              ssh -i "$DEPLOY_KEY_FILE" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$WORKSPACE/.jenkins-known-hosts" "$DEPLOY_USER@$VM_IP" "KOPIA_SERVER=\"$KOPIA_SERVER\" KOPIA_USERNAME=\"$KOPIA_USERNAME\" KOPIA_PASSWORD=\"$KOPIA_PASSWORD\" bash -s -- '$KOPIA_SNAPSHOT_ID' '$ROLLBACK_IMAGE'" < scripts/rollback.sh
+            '''
           }
         }
       }
