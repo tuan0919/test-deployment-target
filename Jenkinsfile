@@ -10,7 +10,7 @@ pipeline {
     booleanParam(name: 'RUN_ROLLBACK', defaultValue: false, description: 'Run explicit image and data rollback')
     string(name: 'KOPIA_SNAPSHOT_ID', defaultValue: '', description: 'Pre-deploy Kopia snapshot ID')
     string(name: 'ROLLBACK_IMAGE', defaultValue: '', description: 'Immutable image to restore')
-    string(name: 'PRODUCTION_URL', defaultValue: '', description: 'Cloudflare HTTPS origin, for example https://app.example.com')
+    string(name: 'PRODUCTION_URL', defaultValue: 'https://test-pipeline.nqat.site', description: 'Cloudflare HTTPS origin')
   }
 
   environment {
