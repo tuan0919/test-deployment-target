@@ -17,7 +17,7 @@ assert_contains() {
 
 MULTIPASS_INFO_EXIT=1 "$ROOT_DIR/scripts/multipass.sh" apply "$TEST_DIR/cloud-init.yaml"
 assert_contains "info eac-demo-vm"
-assert_contains "launch 24.04 --name eac-demo-vm --cpus 2 --memory 2G --disk 10G --network localbr --cloud-init $TEST_DIR/cloud-init.yaml"
+assert_contains "launch 24.04 --name eac-demo-vm --cpus 2 --memory 2G --disk 10G --network localbr --cloud-init $TEST_DIR/cloud-init.yaml --timeout 90"
 
 : > "$MULTIPASS_LOG"
 MULTIPASS_INFO_EXIT=0 "$ROOT_DIR/scripts/multipass.sh" apply "$TEST_DIR/cloud-init.yaml"

@@ -4,7 +4,10 @@
       - registry_ca_cert_path is defined
       - postgres_password is defined
       - postgres_password | length > 0
-    fail_msg: registry_ca_cert_path and postgres_password must be supplied by Jenkins.
+      - cloudflare_tunnel_token_file is defined
+      - lookup('ansible.builtin.file', cloudflare_tunnel_token_file) | trim | length > 0
+    fail_msg: registry_ca_cert_path, postgres_password and cloudflare_tunnel_token_file must be supplied by Jenkins.
+  no_log: true
 
 - name: Install Docker and runtime prerequisites
   ansible.builtin.apt:
@@ -13,6 +16,7 @@
       - curl
       - docker.io
       - docker-compose-v2
+      - jq
       - postgresql-client
       - tar
     state: present
@@ -23,6 +27,68 @@
     name: deploy
     groups: docker
     append: true
+
+- name: Create APT keyring directory
+  ansible.builtin.file:
+    path: /usr/share/keyrings
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Install Cloudflare package signing key
+  ansible.builtin.get_url:
+    url: https://pkg.cloudflare.com/cloudflare-main.gpg
+    dest: /usr/share/keyrings/cloudflare-main.gpg
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Configure Cloudflare APT repository
+  ansible.builtin.apt_repository:
+    repo: deb [signed-by=/usr/share/keyrings/cloudflare-main.gpg] https://pkg.cloudflare.com/cloudflared any main
+    filename: cloudflared
+    state: present
+    update_cache: true
+
+- name: Install cloudflared
+  ansible.builtin.apt:
+    name: cloudflared
+    state: present
+
+- name: Create cloudflared configuration directory
+  ansible.builtin.file:
+    path: /etc/cloudflared
+    state: directory
+    owner: root
+    group: root
+    mode: '0700'
+
+- name: Install protected Cloudflare Tunnel token
+  ansible.builtin.copy:
+    content: "{{ lookup('ansible.builtin.file', cloudflare_tunnel_token_file) | trim }}\n"
+    dest: /etc/cloudflared/tunnel-token
+    owner: root
+    group: root
+    mode: '0600'
+  no_log: true
+  notify: Restart cloudflared
+
+- name: Install cloudflared systemd service
+  ansible.builtin.template:
+    src: cloudflared.service.j2
+    dest: /etc/systemd/system/cloudflared.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Restart cloudflared
+
+- name: Enable and start cloudflared
+  ansible.builtin.systemd_service:
+    name: cloudflared
+    enabled: true
+    state: started
+    daemon_reload: true
 
 - name: Create runtime directories
   ansible.builtin.file:

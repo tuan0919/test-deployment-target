@@ -3,12 +3,14 @@ pipeline {
 
   options {
     skipDefaultCheckout(true)
+    disableConcurrentBuilds()
   }
 
   parameters {
     booleanParam(name: 'RUN_ROLLBACK', defaultValue: false, description: 'Run explicit image and data rollback')
     string(name: 'KOPIA_SNAPSHOT_ID', defaultValue: '', description: 'Pre-deploy Kopia snapshot ID')
     string(name: 'ROLLBACK_IMAGE', defaultValue: '', description: 'Immutable image to restore')
+    string(name: 'PRODUCTION_URL', defaultValue: '', description: 'Cloudflare HTTPS origin, for example https://app.example.com')
   }
 
   environment {
@@ -29,6 +31,11 @@ pipeline {
       steps {
         withCredentials([sshUserPrivateKey(credentialsId: 'BUILD_HOST_SSH_KEY', keyFileVariable: 'BUILD_SSH_KEY', usernameVariable: 'BUILD_SSH_USER')]) {
           script {
+            def productionUrl = params.PRODUCTION_URL?.trim()
+            if (!(productionUrl ==~ /^https:\/\/[A-Za-z0-9][A-Za-z0-9.-]*[A-Za-z0-9]$/)) {
+              error('PRODUCTION_URL must be a bare HTTPS origin such as https://app.example.com')
+            }
+            env.PRODUCTION_URL = productionUrl
             def revision = sh(script: '''ssh -i "$BUILD_SSH_KEY" -o StrictHostKeyChecking=accept-new "$BUILD_SSH_USER@$BUILD_HOST" "set -e; if [ ! -d \"$BUILD_WORKSPACE/.git\" ]; then timeout 60 git clone git@github.com:tuan0919/test-deployment-target.git \"$BUILD_WORKSPACE\"; fi; cd \"$BUILD_WORKSPACE\"; git remote set-url origin git@github.com:tuan0919/test-deployment-target.git; timeout 60 git fetch origin main; git checkout -f origin/main; git clean -fdx >&2; git rev-parse HEAD"''', returnStdout: true).trim()
             env.IMAGE_REF = "${env.REGISTRY_HOST}/library/eac-demo:${revision}"
           }
@@ -45,13 +52,24 @@ pipeline {
       }
     }
 
-    stage('Unit Test') {
+    stage('Test and Security') {
       when {
         expression { return !params.RUN_ROLLBACK }
       }
-      steps {
-        withCredentials([sshUserPrivateKey(credentialsId: 'BUILD_HOST_SSH_KEY', keyFileVariable: 'BUILD_SSH_KEY', usernameVariable: 'BUILD_SSH_USER')]) {
-          sh '''ssh -i "$BUILD_SSH_KEY" "$BUILD_SSH_USER@$BUILD_HOST" "cd '$BUILD_WORKSPACE/app' && bash -lic 'npm ci && npm test'"'''
+      parallel {
+        stage('Unit Test') {
+          steps {
+            withCredentials([sshUserPrivateKey(credentialsId: 'BUILD_HOST_SSH_KEY', keyFileVariable: 'BUILD_SSH_KEY', usernameVariable: 'BUILD_SSH_USER')]) {
+              sh '''ssh -i "$BUILD_SSH_KEY" "$BUILD_SSH_USER@$BUILD_HOST" "cd '$BUILD_WORKSPACE/app' && bash -lic 'npm ci && npm test'"'''
+            }
+          }
+        }
+        stage('Credential Scan') {
+          steps {
+            withCredentials([sshUserPrivateKey(credentialsId: 'BUILD_HOST_SSH_KEY', keyFileVariable: 'BUILD_SSH_KEY', usernameVariable: 'BUILD_SSH_USER')]) {
+              sh '''ssh -i "$BUILD_SSH_KEY" "$BUILD_SSH_USER@$BUILD_HOST" "docker run --rm -v '$BUILD_WORKSPACE:/repo:ro' ghcr.io/gitleaks/gitleaks:v8.29.0 git /repo --no-banner --redact --verbose"'''
+            }
+          }
         }
       }
     }
@@ -100,31 +118,33 @@ pipeline {
         expression { return !params.RUN_ROLLBACK }
       }
       steps {
-        withCredentials([file(credentialsId: 'REGISTRY_CA_CERT', variable: 'REGISTRY_CA_CERT_PATH'), string(credentialsId: 'POSTGRES_PASSWORD', variable: 'POSTGRES_PASSWORD'), sshUserPrivateKey(credentialsId: 'DEPLOY_SSH_KEY', keyFileVariable: 'DEPLOY_KEY_FILE', usernameVariable: 'DEPLOY_SSH_USER'), sshUserPrivateKey(credentialsId: 'BUILD_HOST_SSH_KEY', keyFileVariable: 'BUILD_SSH_KEY', usernameVariable: 'BUILD_SSH_USER')]) {
+        withCredentials([file(credentialsId: 'REGISTRY_CA_CERT', variable: 'REGISTRY_CA_CERT_PATH'), string(credentialsId: 'POSTGRES_PASSWORD', variable: 'POSTGRES_PASSWORD'), string(credentialsId: 'CLOUDFLARE_TUNNEL_TOKEN', variable: 'CLOUDFLARE_TUNNEL_TOKEN'), sshUserPrivateKey(credentialsId: 'DEPLOY_SSH_KEY', keyFileVariable: 'DEPLOY_KEY_FILE', usernameVariable: 'DEPLOY_SSH_USER'), sshUserPrivateKey(credentialsId: 'BUILD_HOST_SSH_KEY', keyFileVariable: 'BUILD_SSH_KEY', usernameVariable: 'BUILD_SSH_USER')]) {
           sh '''set +x
             REMOTE_CA_CERT=/tmp/jenkins-registry-ca.pem
             REMOTE_DEPLOY_KEY=/tmp/jenkins-deploy-key
+            REMOTE_TUNNEL_TOKEN=/tmp/jenkins-cloudflare-tunnel-token
             cleanup() {
-              ssh -i "$BUILD_SSH_KEY" "$BUILD_SSH_USER@$BUILD_HOST" "rm -f '$REMOTE_CA_CERT' '$REMOTE_DEPLOY_KEY'"
+              ssh -i "$BUILD_SSH_KEY" "$BUILD_SSH_USER@$BUILD_HOST" "rm -f '$REMOTE_CA_CERT' '$REMOTE_DEPLOY_KEY' '$REMOTE_TUNNEL_TOKEN'"
             }
             trap cleanup EXIT
             scp -i "$BUILD_SSH_KEY" "$REGISTRY_CA_CERT_PATH" "$BUILD_SSH_USER@$BUILD_HOST:$REMOTE_CA_CERT"
             scp -i "$BUILD_SSH_KEY" "$DEPLOY_KEY_FILE" "$BUILD_SSH_USER@$BUILD_HOST:$REMOTE_DEPLOY_KEY"
+            printf %s "$CLOUDFLARE_TUNNEL_TOKEN" | ssh -i "$BUILD_SSH_KEY" "$BUILD_SSH_USER@$BUILD_HOST" "umask 077; cat > '$REMOTE_TUNNEL_TOKEN'"
             ssh -i "$BUILD_SSH_KEY" "$BUILD_SSH_USER@$BUILD_HOST" \
-              "chmod 600 '$REMOTE_DEPLOY_KEY' && cd '$BUILD_WORKSPACE/ansible' && umask 077 && ssh-keyscan -H -T 10 '$VM_IP' > inventory/known_hosts && '$BUILD_ANSIBLE' playbooks/configure.yml -e 'ansible_ssh_private_key_file=$REMOTE_DEPLOY_KEY' -e 'registry_ca_cert_path=$REMOTE_CA_CERT' -e 'postgres_password=$POSTGRES_PASSWORD'"
+              "chmod 600 '$REMOTE_DEPLOY_KEY' && cd '$BUILD_WORKSPACE/ansible' && umask 077 && ssh-keyscan -H -T 10 '$VM_IP' > inventory/known_hosts && '$BUILD_ANSIBLE' playbooks/configure.yml -e 'ansible_ssh_private_key_file=$REMOTE_DEPLOY_KEY' -e 'registry_ca_cert_path=$REMOTE_CA_CERT' -e 'cloudflare_tunnel_token_file=$REMOTE_TUNNEL_TOKEN' -e 'postgres_password=$POSTGRES_PASSWORD'"
           '''
           }
         }
       }
 
-    stage('Integration Test') {
+    stage('Validate Deployment Host') {
       when {
         expression { return !params.RUN_ROLLBACK }
       }
       steps {
         sh 'umask 077; ssh-keyscan -H -T 10 "$VM_IP" > "$WORKSPACE/.jenkins-known-hosts"; ssh-keygen -F "$VM_IP" -f "$WORKSPACE/.jenkins-known-hosts" >/dev/null'
         withCredentials([sshUserPrivateKey(credentialsId: 'DEPLOY_SSH_KEY', keyFileVariable: 'DEPLOY_KEY_FILE')]) {
-          sh 'ssh -i "$DEPLOY_KEY_FILE" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$WORKSPACE/.jenkins-known-hosts" $DEPLOY_USER@$VM_IP "docker --version && docker compose version && kopia --version"'
+          sh 'ssh -i "$DEPLOY_KEY_FILE" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$WORKSPACE/.jenkins-known-hosts" $DEPLOY_USER@$VM_IP "docker --version && docker compose version && kopia --version && cloudflared --version && systemctl is-active --quiet cloudflared"'
         }
       }
     }
@@ -179,6 +199,28 @@ pipeline {
       }
     }
 
+    stage('Post-deploy Verification') {
+      when {
+        expression { return !params.RUN_ROLLBACK }
+      }
+      parallel {
+        stage('Integration Test') {
+          steps {
+            withCredentials([sshUserPrivateKey(credentialsId: 'DEPLOY_SSH_KEY', keyFileVariable: 'DEPLOY_KEY_FILE')]) {
+              sh 'ssh -i "$DEPLOY_KEY_FILE" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$WORKSPACE/.jenkins-known-hosts" $DEPLOY_USER@$VM_IP "bash -s -- \"$PRODUCTION_URL\" \"${IMAGE_REF##*:}\"" < scripts/integration-test.sh'
+            }
+          }
+        }
+        stage('Performance Test') {
+          steps {
+            withCredentials([sshUserPrivateKey(credentialsId: 'DEPLOY_SSH_KEY', keyFileVariable: 'DEPLOY_KEY_FILE')]) {
+              sh 'ssh -i "$DEPLOY_KEY_FILE" -o StrictHostKeyChecking=yes -o UserKnownHostsFile="$WORKSPACE/.jenkins-known-hosts" $DEPLOY_USER@$VM_IP "bash -s -- \"$PRODUCTION_URL/health\" 50 5 750" < scripts/performance-test.sh'
+            }
+          }
+        }
+      }
+    }
+
     stage('Rollback') {
       when {
         expression { return params.RUN_ROLLBACK }
@@ -194,6 +236,7 @@ pipeline {
         }
       }
     }
+  }
   post {
     always {
       script {
